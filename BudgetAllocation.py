@@ -2,7 +2,6 @@ import streamlit as st
 import plotly.graph_objects as go
 from gurobipy import Model, GRB
 import time
-
 # Streamlit App for Budget Allocation Problem
 def main():
     st.set_page_config(
