@@ -109,30 +109,48 @@ def main():
     st.sidebar.header("Input Parameters")
 
     # Number of customers
-    num_customers = st.sidebar.number_input("Number of Customers", min_value=1, value=2, step=1)
+    if 'num_customers' not in st.session_state:
+        st.session_state.num_customers = 2
+    num_customers = st.sidebar.number_input("Number of Customers", min_value=1, value=st.session_state.num_customers, step=1)
+    st.session_state.num_customers = num_customers
+
+    # Initialize customer coordinates if not set
+    if 'customers' not in st.session_state:
+        st.session_state.customers = [(np.random.uniform(-50, 50), np.random.uniform(-50, 50)) for _ in range(num_customers)]
+
     customers = []
     for i in range(num_customers):
         col1, col2 = st.sidebar.columns(2)
         with col1:
-            customer_x = st.number_input(f"Customer {i+1} X-coordinate", value=np.random.uniform(-50, 50))
+            customer_x = st.number_input(f"Customer {i+1} X-coordinate", value=st.session_state.customers[i][0])
         with col2:
-            customer_y = st.number_input(f"Customer {i+1} Y-coordinate", value=np.random.uniform(-50, 50))
+            customer_y = st.number_input(f"Customer {i+1} Y-coordinate", value=st.session_state.customers[i][1])
         customers.append((customer_x, customer_y))
+        st.session_state.customers[i] = (customer_x, customer_y)  # Update customer coordinates
 
     # Number of facilities
-    num_facilities = st.sidebar.number_input("Number of Facilities", min_value=1, value=5, step=1)
+    if 'num_facilities' not in st.session_state:
+        st.session_state.num_facilities = 5
+    num_facilities = st.sidebar.number_input("Number of Facilities", min_value=1, value=st.session_state.num_facilities, step=1)
+    st.session_state.num_facilities = num_facilities
+
+    # Initialize facility coordinates and costs if not set
+    if 'facilities' not in st.session_state:
+        st.session_state.facilities = [(np.random.uniform(-50, 50), np.random.uniform(-50, 50), 10) for _ in range(num_facilities)]
+
     facilities = []
     setup_cost = []
     for i in range(num_facilities):
         col1, col2, col3 = st.sidebar.columns(3)
         with col1:
-            facility_x = st.number_input(f"Facility {i+1} X-coordinate", value=np.random.uniform(-50, 50))
+            facility_x = st.number_input(f"Facility {i+1} X-coordinate", value=st.session_state.facilities[i][0])
         with col2:
-            facility_y = st.number_input(f"Facility {i+1} Y-coordinate", value=np.random.uniform(-50, 50))
+            facility_y = st.number_input(f"Facility {i+1} Y-coordinate", value=st.session_state.facilities[i][1])
         with col3:
-            facility_cost = st.number_input(f"Facility {i+1} Setup Cost", value=10)
+            facility_cost = st.number_input(f"Facility {i+1} Setup Cost", value=st.session_state.facilities[i][2])
         facilities.append((facility_x, facility_y))
         setup_cost.append(facility_cost)
+        st.session_state.facilities[i] = (facility_x, facility_y, facility_cost)  # Update facility data
 
     # Cost per mile
     cost_per_mile = st.sidebar.number_input("Cost Per Mile", min_value=0.0, value=1.0)
