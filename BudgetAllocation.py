@@ -2,42 +2,49 @@ import streamlit as st
 import plotly.graph_objects as go
 from gurobipy import Model, GRB
 import time
-# Streamlit App for Budget Allocation Problem
+
+# Streamlit App for Resource Allocation with Constraints
 def main():
     st.set_page_config(
-        page_title="Optimisation de l'Allocation du Budget",
+        page_title="Optimisation d'Allocation de Ressources",
         layout="wide",
         initial_sidebar_state="expanded",
     )
 
-    st.title("📊 Optimisation de l'Allocation du Budget")
+    st.title("📊 Optimisation d'Allocation de Ressources ")
 
     # Sidebar Inputs
     with st.sidebar:
         st.header("📋 Paramètres d'Entrée")
         
-        # Budget input
-        total_budget = st.number_input("Budget Total (€)", min_value=1000, value=10000, step=500)
+        # Total resources input
+        total_resources = st.number_input("Ressources Totales Disponibles", min_value=1, value=100, step=1)
         
         # Number of projects
         num_projects = st.number_input("Nombre de Projets", min_value=2, max_value=10, value=3, step=1)
         
-        st.header("🔧 Coûts et Rendements")
+        st.header("🔧 Coûts, Rendements et Contraintes")
         project_costs = []
         project_returns = []
         project_min_units = []
+        project_max_units = []
+        project_priorities = []
 
         # Create tabs for project-specific inputs
         tabs = st.tabs([f"Projet {i + 1}" for i in range(num_projects)])
         for i in range(num_projects):
             with tabs[i]:
                 st.subheader(f"Configuration pour Projet {i + 1}")
-                cost = st.number_input(f"Coût par unité pour Projet {i + 1} (€)", min_value=10, value=500, step=50, key=f"cost_{i}")
-                ret = st.number_input(f"Retour par unité pour Projet {i + 1} (€)", min_value=10, value=800, step=50, key=f"return_{i}")
+                cost = st.number_input(f"Coût par unité pour Projet {i + 1}", min_value=1, value=5, step=1, key=f"cost_{i}")
+                ret = st.number_input(f"Retour par unité pour Projet {i + 1}", min_value=1, value=10, step=1, key=f"return_{i}")
                 min_units = st.number_input(f"Unités minimales pour Projet {i + 1}", min_value=0, value=0, step=1, key=f"min_units_{i}")
+                max_units = st.number_input(f"Unités maximales pour Projet {i + 1}", min_value=1, value=10, step=1, key=f"max_units_{i}")
+                priority = st.number_input(f"Priorité pour Projet {i + 1} (1 = plus élevée)", min_value=1, max_value=10, value=5, key=f"priority_{i}")
                 project_costs.append(cost)
                 project_returns.append(ret)
                 project_min_units.append(min_units)
+                project_max_units.append(max_units)
+                project_priorities.append(priority)
 
     # Interface Layout
     col1, col2 = st.columns([2, 1])
@@ -47,20 +54,33 @@ def main():
         if st.button("Optimiser 🚀"):
             try:
                 # Model Initialization
-                model = Model("Budget_Optimization")
-                
+                model = Model("Resource_Allocation")
+
                 # Decision Variables: units allocated to each project
                 x = [model.addVar(vtype=GRB.CONTINUOUS, name=f"Project_{i+1}") for i in range(num_projects)]
                 
-                # Objective Function: Maximize Returns
-                model.setObjective(sum(project_returns[i] * x[i] for i in range(num_projects)), GRB.MAXIMIZE)
-                
-                # Constraint: Total Budget
-                model.addConstr(sum(project_costs[i] * x[i] for i in range(num_projects)) <= total_budget, name="Budget_Constraint")
-                
-                # Per-Project Minimum Units Constraint
+
+                # Add priority weights
+                priority_weights = [1 if priority == 1 else 0.8 if priority == 2 else 0.5 for priority in project_priorities]
+
+                # Objective Function: Maximize Returns (weighted by priorities)
+                model.setObjective(
+                    sum(project_returns[i] * priority_weights[i] * x[i] for i in range(num_projects)), GRB.MAXIMIZE
+                )
+
+
+                # Constraint: Total Resources
+                model.addConstr(
+                    sum(project_costs[i] * x[i] for i in range(num_projects)) <= total_resources,
+                    name="Resource_Limit"
+                )
+
+                # Per-Project Minimum and Maximum Units Constraints
                 for i in range(num_projects):
-                    model.addConstr(x[i] >= project_min_units[i], name=f"Min_Units_Constraint_Project_{i+1}")
+                    model.addConstr(x[i] >= project_min_units[i], name=f"Min_Units_Project_{i+1}")
+                    model.addConstr(x[i] <= project_max_units[i], name=f"Max_Units_Project_{i+1}")
+
+               
 
                 # Solve Model
                 with st.spinner("Optimisation en cours..."):
@@ -78,10 +98,11 @@ def main():
                     for i in range(num_projects):
                         allocation.append(
                             {"Projet": f"Projet {i+1}", 
-                             "Coût par Unité (€)": project_costs[i], 
-                             "Retour par Unité (€)": project_returns[i],
+                             "Coût par Unité": project_costs[i], 
+                             "Retour par Unité": project_returns[i],
                              "Unités Allouées": f"{x[i].x:.2f}",
-                             "Unités Min. Requises": project_min_units[i]}
+                             "Unités Min. Requises": project_min_units[i],
+                             "Unités Max. Requises": project_max_units[i]}
                         )
                     
                     st.table(allocation)
@@ -96,7 +117,7 @@ def main():
                         name="Unités Allouées"
                     ))
                     fig.update_layout(
-                        title="📊 Allocation Optimale du Budget",
+                        title="📊 Allocation Optimale des Ressources",
                         xaxis_title="Projets",
                         yaxis_title="Unités Allouées",
                         template="plotly_white"
@@ -112,21 +133,20 @@ def main():
         st.header("ℹ️ Instructions")
         with st.expander("📃 Guide d'Utilisation"):
             st.write("""
-            - *Budget Total* : Définissez le montant total disponible pour l'allocation.
-            - *Nombre de Projets* : Indiquez le nombre de projets à optimiser.
-            - *Coûts et Rendements* : Saisissez les coûts et rendements par unité pour chaque projet.
-            - Définissez les *unités minimales* pour chaque projet dans les onglets.
-            - Cliquez sur *'Optimiser'* pour trouver l'allocation optimale du budget.
+            - **Ressources Totales** : Entrez les ressources disponibles à distribuer.
+            - **Nombre de Projets** : Indiquez le nombre de projets à optimiser.
+            - **Contraintes** : Saisissez les coûts, rendements, unités minimales et maximales pour chaque projet.
+            - Ajoutez les contraintes spécifiques dans le champ dédié.
+            - Cliquez sur **'Optimiser'** pour trouver une allocation optimale.
             """)
         with st.expander("🧮 Méthodologie"):
             st.write("""
-            - Le problème est formulé comme un *programme linéaire*.
-            - L'objectif est de *maximiser les rendements* tout en respectant les contraintes budgétaires et minimales.
-            - La résolution est effectuée à l'aide du solveur *Gurobi*.
+            - Formulation : Problème de programmation linéaire (maximisation).
+            - Contraintes : Limitation des ressources, unités minimales/maximales, interdépendances, priorités.
             """)
         with st.expander("🔧 Notes Techniques"):
-            st.write("- Le solveur Gurobi est requis pour exécuter cette application.")
-            st.write("- Les unités allouées sont affichées avec des graphiques interactifs.")
+            st.write("- Le solveur **Gurobi** est utilisé pour résoudre le problème.")
+            st.write("- Les solutions et graphiques sont interactifs et dynamiques.")
 
-if __name__== "__main__":
+if __name__ == "__main__":
     main()
