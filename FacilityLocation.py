@@ -33,7 +33,11 @@ def solve_facility_location(customers, facilities, setup_cost, cost_per_mile):
     m.addConstrs((gp.quicksum(assign[(c, f)] for f in range(num_facilities)) == 1 for c in range(num_customers)), name='Demand')
 
     # Objective Function: Minimize total costs
-    m.setObjective(select.prod(setup_cost) + assign.prod(shipping_cost), GRB.MINIMIZE)
+    m.setObjective(
+        gp.quicksum(setup_cost[f] * select[f] for f in range(num_facilities)) +
+        gp.quicksum(shipping_cost[c, f] * assign[c, f] for c, f in cartesian_prod),
+        GRB.MINIMIZE
+    )
 
     # Optimize model
     m.optimize()
@@ -48,94 +52,95 @@ def solve_facility_location(customers, facilities, setup_cost, cost_per_mile):
 def plot_facilities_and_supermarkets(customers, facilities, selected_facilities, shipments):
     plt.figure(figsize=(10, 6))
 
-    # Plot supermarkets
+    # Plot customers
     customer_x, customer_y = zip(*customers)
-    plt.scatter(customer_x, customer_y, c='blue', label='Supermarkets', s=100, edgecolors='black')
+    plt.scatter(customer_x, customer_y, c='blue', label='Clients', s=100, edgecolors='black')
 
     # Plot facilities
     facility_x, facility_y = zip(*facilities)
-    plt.scatter(facility_x, facility_y, c='red', label='Candidate Facilities', s=150, marker='^', edgecolors='black')
+    plt.scatter(facility_x, facility_y, c='red', label='Installations Candidats', s=150, marker='^', edgecolors='black')
 
     # Highlight selected facilities
-    for idx in selected_facilities:
-        plt.scatter(facility_x[idx], facility_y[idx], c='green', s=200, marker='^', edgecolors='black', label='Selected Facility')
+    selected_x = [facilities[f][0] for f in selected_facilities]
+    selected_y = [facilities[f][1] for f in selected_facilities]
+    plt.scatter(selected_x, selected_y, c='green', s=200, marker='^', edgecolors='black', label='Installations Sélectionnées')
 
     # Draw lines for shipments
     for (customer, facility), fraction in shipments.items():
         if fraction > 0:
             plt.plot(
-                [customer_x[customer], facility_x[facility]],
-                [customer_y[customer], facility_y[facility]],
+                [customers[customer][0], facilities[facility][0]],
+                [customers[customer][1], facilities[facility][1]],
                 c='gray', linestyle='--', linewidth=0.7
             )
 
-    plt.title("Facility Location Optimization")
-    plt.xlabel("X-coordinate")
-    plt.ylabel("Y-coordinate")
+    plt.title("Optimisation de l'Allocation des Installations")
+    plt.xlabel("Coordonnée X")
+    plt.ylabel("Coordonnée Y")
     plt.legend()
     plt.grid(True, linestyle='--', alpha=0.7)
     st.pyplot(plt)
 
 # Main Streamlit app
 def main():
-    st.set_page_config(page_title="Facility Location Optimization", layout="wide")
+    st.set_page_config(page_title="Optimisation de l'Allocation des Installations", layout="wide")
 
-    st.markdown("<h1 style='text-align: center;'>Facility Location Optimization</h1>", unsafe_allow_html=True)
+    st.markdown("<h1 style='text-align: center;'>Optimisation de l'Allocation des Installations</h1>", unsafe_allow_html=True)
 
     # Add instructions and methodology sections
     st.header("ℹ️ Instructions")
     with st.expander("📃 Guide d'Utilisation"):
         st.write("""
-        - *Number of Customers*: Define how many customers you want to optimize for.
-        - *Number of Facilities*: Set the number of facilities to choose from.
-        - *Facility Setup Costs*: Define the setup cost for each facility.
-        - *Cost Per Mile*: Define the transportation cost between a customer and facility.
-        - *Solve*: Click 'Solve' to compute the optimal facility selection and shipment distribution.
+        - **Nombre de Clients** : Définissez le nombre de clients à optimiser.
+        - **Nombre d'Installations** : Définissez le nombre d'installations parmi lesquelles choisir.
+        - **Coûts de Mise en Place des Installations** : Définissez le coût fixe pour ouvrir chaque installation.
+        - **Coût par Mile** : Définissez le coût de transport par unité de distance.
+        - **Résoudre** : Cliquez sur 'Résoudre' pour calculer la sélection optimale des installations et la distribution des expéditions.
         """)
 
     with st.expander("🧮 Méthodologie"):
         st.write("""
-        - This problem is modeled as a *Mixed-Integer Programming* (MIP) problem.
-        - The objective is to *minimize total costs* by optimizing facility selection and customer allocation.
-        - The solution is computed using the *Gurobi solver* to find the optimal facility locations and shipment plans.
+        - Ce problème est modélisé comme un *Programmation Mixte en Nombres Entiers* (MIP).
+        - L'objectif est de *minimiser les coûts totaux* en optimisant la sélection des installations et l'allocation des clients.
+        - La solution est calculée en utilisant le *solveur Gurobi* pour trouver les emplacements optimaux des installations et les plans d'expédition.
         """)
 
     with st.expander("🔧 Notes Techniques"):
-        st.write("- The Gurobi solver is required to run this application.")
-        st.write("- The results are displayed graphically for better visualization.")
-        st.write("- Click on the 'Solve' button after providing the input parameters.")
+        st.write("- Le solveur Gurobi est requis pour exécuter cette application.")
+        st.write("- Les résultats sont affichés graphiquement pour une meilleure visualisation.")
+        st.write("- Cliquez sur le bouton 'Résoudre' après avoir fourni les paramètres d'entrée.")
 
     # Sidebar inputs for number of customers and facilities
-    st.sidebar.header("Input Parameters")
+    st.sidebar.header("Paramètres d'Entrée")
 
-    # Number of customers
+    # Nombre de clients
     if 'num_customers' not in st.session_state:
         st.session_state.num_customers = 2
-    num_customers = st.sidebar.number_input("Number of Customers", min_value=1, value=st.session_state.num_customers, step=1)
+    num_customers = st.sidebar.number_input("Nombre de Clients", min_value=1, value=st.session_state.num_customers, step=1)
     st.session_state.num_customers = num_customers
 
-    # Initialize customer coordinates if not set
-    if 'customers' not in st.session_state:
+    # Initialiser les coordonnées des clients si non définies
+    if 'customers' not in st.session_state or len(st.session_state.customers) != num_customers:
         st.session_state.customers = [(np.random.uniform(-50, 50), np.random.uniform(-50, 50)) for _ in range(num_customers)]
 
     customers = []
     for i in range(num_customers):
         col1, col2 = st.sidebar.columns(2)
         with col1:
-            customer_x = st.number_input(f"Customer {i+1} X-coordinate", value=st.session_state.customers[i][0])
+            customer_x = st.number_input(f"Client {i+1} Coordonnée X", value=st.session_state.customers[i][0], key=f"customer_x_{i}")
         with col2:
-            customer_y = st.number_input(f"Customer {i+1} Y-coordinate", value=st.session_state.customers[i][1])
+            customer_y = st.number_input(f"Client {i+1} Coordonnée Y", value=st.session_state.customers[i][1], key=f"customer_y_{i}")
         customers.append((customer_x, customer_y))
-        st.session_state.customers[i] = (customer_x, customer_y)  # Update customer coordinates
+        st.session_state.customers[i] = (customer_x, customer_y)  # Mettre à jour les coordonnées des clients
 
-    # Number of facilities
+    # Nombre d'installations
     if 'num_facilities' not in st.session_state:
         st.session_state.num_facilities = 5
-    num_facilities = st.sidebar.number_input("Number of Facilities", min_value=1, value=st.session_state.num_facilities, step=1)
+    num_facilities = st.sidebar.number_input("Nombre d'Installations", min_value=1, value=st.session_state.num_facilities, step=1)
     st.session_state.num_facilities = num_facilities
 
-    # Initialize facility coordinates and costs if not set
-    if 'facilities' not in st.session_state:
+    # Initialiser les coordonnées et coûts des installations si non définis
+    if 'facilities' not in st.session_state or len(st.session_state.facilities) != num_facilities:
         st.session_state.facilities = [(np.random.uniform(-50, 50), np.random.uniform(-50, 50), 10) for _ in range(num_facilities)]
 
     facilities = []
@@ -143,32 +148,32 @@ def main():
     for i in range(num_facilities):
         col1, col2, col3 = st.sidebar.columns(3)
         with col1:
-            facility_x = st.number_input(f"Facility {i+1} X-coordinate", value=st.session_state.facilities[i][0])
+            facility_x = st.number_input(f"Installation {i+1} Coordonnée X", value=st.session_state.facilities[i][0], key=f"facility_x_{i}")
         with col2:
-            facility_y = st.number_input(f"Facility {i+1} Y-coordinate", value=st.session_state.facilities[i][1])
+            facility_y = st.number_input(f"Installation {i+1} Coordonnée Y", value=st.session_state.facilities[i][1], key=f"facility_y_{i}")
         with col3:
-            facility_cost = st.number_input(f"Facility {i+1} Setup Cost", value=st.session_state.facilities[i][2])
+            facility_cost = st.number_input(f"Installation {i+1} Coût de Mise en Place", value=st.session_state.facilities[i][2], key=f"facility_cost_{i}")
         facilities.append((facility_x, facility_y))
         setup_cost.append(facility_cost)
-        st.session_state.facilities[i] = (facility_x, facility_y, facility_cost)  # Update facility data
+        st.session_state.facilities[i] = (facility_x, facility_y, facility_cost)  # Mettre à jour les données des installations
 
-    # Cost per mile
-    cost_per_mile = st.sidebar.number_input("Cost Per Mile", min_value=0.0, value=1.0)
+    # Coût par mile
+    cost_per_mile = st.sidebar.number_input("Coût par Mile", min_value=0.0, value=1.0, step=0.1)
 
-    # Solve the problem when the button is pressed
-    if st.sidebar.button("Solve"):
+    # Bouton pour résoudre le problème
+    if st.sidebar.button("Résoudre 🚀"):
         selected_facilities, shipments = solve_facility_location(customers, facilities, setup_cost, cost_per_mile)
 
-        st.subheader("Optimization Results")
-        st.write("### Selected Facilities:")
+        st.subheader("Résultats de l'Optimisation")
+        st.write("### Installations Sélectionnées:")
         for facility in selected_facilities:
-            st.write(f"Facility {facility + 1}")
+            st.write(f"Installation {facility + 1}")
 
-        st.write("### Shipment Plan:")
+        st.write("### Plan d'Expédition:")
         for (customer, facility), fraction in shipments.items():
-            st.write(f"Customer {customer + 1} is served {round(100 * fraction, 2)}% by Facility {facility + 1}")
+            st.write(f"Client {customer + 1} est servi à {round(100 * fraction, 2)}% par Installation {facility + 1}")
 
-        # Visualization
+        # Visualisation
         plot_facilities_and_supermarkets(customers, facilities, selected_facilities, shipments)
 
 if __name__ == "__main__":
