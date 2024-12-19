@@ -15,42 +15,42 @@ def plot_gantt_streamlit(jobs_data, schedule, num_machines):
 
     ax.set_yticks(range(num_machines))
     ax.set_yticklabels([f"Machine {i + 1}" for i in range(num_machines)])  # Adjust to start from 1
-    ax.set_xlabel("Time")
-    ax.set_title("Job Shop Scheduling Gantt Chart")
+    ax.set_xlabel("Temps")
+    ax.set_title("Diagramme de Gantt - Planification des Travaux")
     st.pyplot(fig)
 
 # Streamlit App for Job Shop Scheduling
 def main():
-    st.set_page_config(page_title="Job Shop Scheduling", layout="wide", initial_sidebar_state="expanded")
+    st.set_page_config(page_title="Planification des Travaux", layout="wide", initial_sidebar_state="expanded")
 
-    st.title("📊 Job Shop Scheduling")
+    st.title("📊 Planification des Travaux")
 
     # Sidebar Inputs
     with st.sidebar:
-        st.header("📋 Input Parameters")
+        st.header("📋 Paramètres d'Entrée")
 
         # Number of jobs and machines
-        num_jobs = st.number_input("Number of Jobs (starting from 1)", min_value=1, value=2, step=1)
-        num_machines = st.number_input("Number of Machines (starting from 1)", min_value=1, value=3, step=1)
+        num_jobs = st.number_input("Nombre de Travaux (à partir de 1)", min_value=1, value=2, step=1)
+        num_machines = st.number_input("Nombre de Machines (à partir de 1)", min_value=1, value=3, step=1)
 
         # Job tasks input
-        st.header("🔧 Job Tasks")
+        st.header("🔧 Tâches des Travaux")
         jobs_data = []
         for job_id in range(num_jobs):
-            with st.expander(f"Job {job_id + 1}"):  # Adjust to show 1-based indexing
+            with st.expander(f"Travail {job_id + 1}"):  # Adjust to show 1-based indexing
                 tasks = []
-                num_tasks = st.number_input(f"Number of tasks in Job {job_id + 1}", min_value=1, value=2, step=1, key=f"num_tasks_{job_id}")
+                num_tasks = st.number_input(f"Nombre de tâches pour le Travail {job_id + 1}", min_value=1, value=2, step=1, key=f"num_tasks_{job_id}")
                 for task_id in range(num_tasks):
-                    machine = st.number_input(f"Task {task_id + 1} Machine", min_value=1, max_value=num_machines, value=1, step=1, key=f"machine_{job_id}_{task_id}")
-                    duration = st.number_input(f"Task {task_id + 1} Duration", min_value=1, value=1, step=1, key=f"duration_{job_id}_{task_id}")
+                    machine = st.number_input(f"Tâche {task_id + 1} Machine", min_value=1, max_value=num_machines, value=1, step=1, key=f"machine_{job_id}_{task_id}")
+                    duration = st.number_input(f"Tâche {task_id + 1} Durée", min_value=1, value=1, step=1, key=f"duration_{job_id}_{task_id}")
                     tasks.append((machine - 1, duration))  # Convert to 0-based indexing
                 jobs_data.append(tasks)
 
     col1, col2 = st.columns([2, 1])
 
     with col1:
-        st.header("📈 Optimization Results")
-        if st.button("Optimize 🚀"):
+        st.header("📈 Résultats de l'Optimisation")
+        if st.button("Optimiser 🚀"):
             try:
                 # Horizon calculation
                 horizon = sum(task[1] for job in jobs_data for task in job)
@@ -108,15 +108,15 @@ def main():
                 model.setObjective(makespan, GRB.MINIMIZE)
 
                 # Solve the model
-                with st.spinner("Optimization in progress..."):
+                with st.spinner("Optimisation en cours..."):
                     start_time = time.time()
                     model.optimize()
                     end_time = time.time()
 
                 if model.status == GRB.OPTIMAL:
-                    st.success("✅ Optimal Solution Found!")
-                    st.metric("Optimal Makespan", f"{makespan.X}")
-                    st.metric("Solution Time (s)", f"{end_time - start_time:.2f}")
+                    st.success("✅ Solution optimale trouvée !")
+                    st.metric("Makespan optimal", f"{makespan.X}")
+                    st.metric("Temps de solution (s)", f"{end_time - start_time:.2f}")
 
                     # Extract schedule
                     schedule = {machine: [] for machine in range(num_machines)}
@@ -132,37 +132,36 @@ def main():
                     # Plot Gantt chart
                     plot_gantt_streamlit(jobs_data, schedule, num_machines)
                 else:
-                    st.error("❌ No optimal solution found.")
+                    st.error("❌ Aucune solution optimale trouvée.")
 
             except Exception as e:
-                st.error(f"Error: {str(e)}")
+                st.error(f"Erreur: {str(e)}")
 
     with col2:
         with st.expander("ℹ️ Instructions"):
             st.write("""
-            - Use the sidebar to input the number of jobs, machines, and task details.
-            - Click the 'Optimize' button to solve the scheduling problem.
-            - The optimal schedule and Gantt chart will be displayed.
+            - Utilisez la barre latérale pour entrer le nombre de travaux, de machines et les détails des tâches.
+            - Cliquez sur le bouton 'Optimiser' pour résoudre le problème de planification.
+            - Le programme affichera le planning optimal et le diagramme de Gantt.
             """)
-        with st.expander("📜Constraints"):
+        with st.expander("📜 Contraintes"):
             st.write(
                 """
-                - 🔗 **Consecutive Task Execution**: Two specified tasks must run consecutively, i.e., the start time of the second task must immediately follow the end time of the first task. This ensures that no gap exists between these tasks.
+                - 🔗 **Exécution Consécutive des Tâches** : Deux tâches spécifiées doivent être exécutées consécutivement, c'est-à-dire que l'heure de début de la deuxième tâche doit immédiatement suivre la fin de la première tâche.
         
-                - 🚫 **Non-Overlapping Tasks**: No two tasks assigned to the same machine can overlap in time. Tasks are scheduled sequentially on a single machine.
+                - 🚫 **Tâches Non-Empiétant sur la Même Machine** : Aucune tâche affectée à une machine ne peut chevaucher une autre tâche. Les tâches sont programmées de manière séquentielle sur une machine.
         
-                - ⏳ **Precedence Constraints**: A task must be completed before another task can start if it depends on the first task's outcome.
+                - ⏳ **Contraintes de Précédence** : Une tâche doit être terminée avant que la tâche suivante puisse commencer, si elle dépend du résultat de la première tâche.
         
-                - ⚙️ **Machine Availability**: Each machine can process only one task at a time.
+                - ⚙️ **Disponibilité des Machines** : Chaque machine peut traiter une seule tâche à la fois.
         
-                - ⏲️ **Fixed Processing Times**: Tasks have predefined durations that cannot be changed during scheduling.
+                - ⏲️ **Durées de Traitement Fixes** : Les tâches ont des durées pré-définies qui ne peuvent pas être modifiées lors de la planification.
         
-                - 🛠️ **Task Assignment**: Each task is assigned to exactly one machine as specified in the problem input.
+                - 🛠️ **Affectation des Tâches** : Chaque tâche est affectée à une machine spécifique, comme spécifié dans les entrées du problème.
         
-                - 🕒 **Minimized Makespan**: The model minimizes the total time required to complete all tasks (makespan).
+                - 🕒 **Makespan Minimisé** : Le modèle minimise le temps total nécessaire pour accomplir toutes les tâches (makespan).
                 """
             )
-
 
 if __name__ == "__main__":
     main()
