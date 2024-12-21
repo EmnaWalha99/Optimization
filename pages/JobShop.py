@@ -9,8 +9,10 @@ def plot_gantt_streamlit(jobs_data, schedule, num_machines):
 
     for machine in range(num_machines):
         for job, task, start, duration in schedule[machine]:
+            job_name = jobs_data[job][0]  # Job name
+            task_name = jobs_data[job][1][task][0]  # Task name
             ax.barh(machine, duration, left=start, align='center', color=f"C{job}", edgecolor='black')
-            ax.text(start + duration / 2, machine, f"J{job}T{task}",
+            ax.text(start + duration / 2, machine, f"{job_name}-{task_name}",
                     ha='center', va='center', color='white')
 
     ax.set_yticks(range(num_machines))
@@ -27,41 +29,43 @@ def main():
 
     # Sidebar Inputs
     with st.sidebar:
-        st.header("📋 Paramètres d'Entrée")
+        st.header("🗈 Paramètres d'Entrée")
 
         # Number of jobs and machines
-        num_jobs = st.number_input("Nombre de Travaux (à partir de 1)", min_value=1, value=2, step=1)
-        num_machines = st.number_input("Nombre de Machines (à partir de 1)", min_value=1, value=3, step=1)
+        num_jobs = st.number_input("Nombre de Travaux (\u00e0 partir de 1)", min_value=1, value=2, step=1)
+        num_machines = st.number_input("Nombre de Machines (\u00e0 partir de 1)", min_value=1, value=3, step=1)
 
         # Job tasks input
         st.header("🔧 Tâches des Travaux")
         jobs_data = []
         for job_id in range(num_jobs):
             with st.expander(f"Travail {job_id + 1}"):  # Adjust to show 1-based indexing
+                job_name = st.text_input(f"Nom du Travail {job_id + 1}", value=f"Travail {job_id + 1}")
                 tasks = []
                 num_tasks = st.number_input(f"Nombre de tâches pour le Travail {job_id + 1}", min_value=1, value=2, step=1, key=f"num_tasks_{job_id}")
                 for task_id in range(num_tasks):
-                    machine = st.number_input(f"Tâche {task_id + 1} Machine", min_value=1, max_value=num_machines, value=1, step=1, key=f"machine_{job_id}_{task_id}")
-                    duration = st.number_input(f"Tâche {task_id + 1} Durée", min_value=1, value=1, step=1, key=f"duration_{job_id}_{task_id}")
-                    tasks.append((machine - 1, duration))  # Convert to 0-based indexing
-                jobs_data.append(tasks)
+                    task_name = st.text_input(f"Nom de la Tâche {task_id + 1} (Travail {job_id + 1})", value=f"Tâche {task_id + 1}", key=f"task_name_{job_id}_{task_id}")
+                    machine = st.number_input(f"Machine pour {task_name}", min_value=1, max_value=num_machines, value=1, step=1, key=f"machine_{job_id}_{task_id}")
+                    duration = st.number_input(f"Durée de {task_name}", min_value=1, value=1, step=1, key=f"duration_{job_id}_{task_id}")
+                    tasks.append((task_name, machine - 1, duration))  # Convert machine to 0-based indexing
+                jobs_data.append((job_name, tasks))
 
     col1, col2 = st.columns([2, 1])
 
     with col1:
-        st.header("📈 Résultats de l'Optimisation")
+        st.header("📊 Résultats de l'Optimisation")
         if st.button("Optimiser 🚀"):
             try:
                 # Horizon calculation
-                horizon = sum(task[1] for job in jobs_data for task in job)
+                horizon = sum(task[2] for job in jobs_data for task in job[1])
 
                 # Model initialization
                 model = Model("JobShop")
 
                 # Decision variables
                 start_vars = {}
-                for job_id, job in enumerate(jobs_data):
-                    for task_id, (machine, duration) in enumerate(job):
+                for job_id, (job_name, job) in enumerate(jobs_data):
+                    for task_id, (task_name, machine, duration) in enumerate(job):
                         start_vars[job_id, task_id] = model.addVar(vtype=GRB.INTEGER, name=f"start_{job_id}_{task_id}")
 
                 # Makespan variable
@@ -69,18 +73,18 @@ def main():
 
                 # Constraints
                 # 1. Precedence constraints within jobs
-                for job_id, job in enumerate(jobs_data):
+                for job_id, (job_name, job) in enumerate(jobs_data):
                     for task_id in range(len(job) - 1):
                         model.addConstr(
-                            start_vars[job_id, task_id + 1] >= start_vars[job_id, task_id] + job[task_id][1],
+                            start_vars[job_id, task_id + 1] >= start_vars[job_id, task_id] + job[task_id][2],
                             name=f"precedence_{job_id}_{task_id}"
                         )
 
                 # 2. No overlap constraints on machines
                 for machine in range(num_machines):
                     machine_tasks = []
-                    for job_id, job in enumerate(jobs_data):
-                        for task_id, (task_machine, duration) in enumerate(job):
+                    for job_id, (job_name, job) in enumerate(jobs_data):
+                        for task_id, (task_name, task_machine, duration) in enumerate(job):
                             if task_machine == machine:
                                 machine_tasks.append((job_id, task_id, duration))
 
@@ -98,9 +102,9 @@ def main():
                                 )
 
                 # 3. Makespan constraints
-                for job_id, job in enumerate(jobs_data):
+                for job_id, (job_name, job) in enumerate(jobs_data):
                     model.addConstr(
-                        makespan >= start_vars[job_id, len(job) - 1] + job[-1][1],
+                        makespan >= start_vars[job_id, len(job) - 1] + job[-1][2],
                         name=f"makespan_job_{job_id}"
                     )
 
@@ -120,8 +124,8 @@ def main():
 
                     # Extract schedule
                     schedule = {machine: [] for machine in range(num_machines)}
-                    for job_id, job in enumerate(jobs_data):
-                        for task_id, (machine, duration) in enumerate(job):
+                    for job_id, (job_name, job) in enumerate(jobs_data):
+                        for task_id, (task_name, machine, duration) in enumerate(job):
                             start_time = start_vars[job_id, task_id].X
                             schedule[machine].append((job_id, task_id, start_time, duration))
 
@@ -148,17 +152,13 @@ def main():
             st.write(
                 """
                 - 🔗 **Exécution Consécutive des Tâches** : Deux tâches spécifiées doivent être exécutées consécutivement, c'est-à-dire que l'heure de début de la deuxième tâche doit immédiatement suivre la fin de la première tâche.
-        
-                - 🚫 **Tâches Non-Empiétant sur la Même Machine** : Aucune tâche affectée à une machine ne peut chevaucher une autre tâche. Les tâches sont programmées de manière séquentielle sur une machine.
-        
+                - 🚫 **Tâches Non-Empiétant sur la Même Machine** : Aucune tâche affectée à une machine ne peut chevaucher une autre tâche.
                 - ⏳ **Contraintes de Précédence** : Une tâche doit être terminée avant que la tâche suivante puisse commencer, si elle dépend du résultat de la première tâche.
-        
                 - ⚙️ **Disponibilité des Machines** : Chaque machine peut traiter une seule tâche à la fois.
-        
                 - ⏲️ **Durées de Traitement Fixes** : Les tâches ont des durées pré-définies qui ne peuvent pas être modifiées lors de la planification.
-        
+              
+
                 - 🛠️ **Affectation des Tâches** : Chaque tâche est affectée à une machine spécifique, comme spécifié dans les entrées du problème.
-        
                 - 🕒 **Makespan Minimisé** : Le modèle minimise le temps total nécessaire pour accomplir toutes les tâches (makespan).
                 """
             )
