@@ -6,7 +6,6 @@ import os
 import plotly.graph_objects as go
 from gurobipy import Model, GRB
 
-# Streamlit interface
 def main():
     st.set_page_config(
         page_title="Analyse et Optimisation de Scripts Python",
@@ -14,10 +13,8 @@ def main():
         initial_sidebar_state="expanded",
     )
 
-    # Updated to ensure proper Unicode handling for emojis in the title
     st.title("📞 Analyse et Optimisation de Scripts Python")
 
-    # Sidebar for file upload and constraints
     with st.sidebar:
         st.header("📂 Charger un Script")
         uploaded_file = st.file_uploader("Uploader un fichier .py", type=["py"], help="Chargez votre script Python ici")
